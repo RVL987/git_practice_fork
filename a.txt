@@ -2,3 +2,4 @@ a=34
  apple is red
 orange is fruit
  apple is red
+sun is bright
