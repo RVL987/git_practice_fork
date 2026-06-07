@@ -6,3 +6,4 @@ sun is bright
 sky is dark
 stars twinkle
 moon is hunched
+sky is blue
