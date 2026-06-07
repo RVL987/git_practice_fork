@@ -5,3 +5,4 @@ orange is fruit
 sun is bright
 sky is dark
 stars twinkle
+moon is hunched
