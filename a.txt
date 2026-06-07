@@ -7,3 +7,4 @@ sky is dark
 stars twinkle
 moon is hunched
 sky is blue
+a is the first alphabet
