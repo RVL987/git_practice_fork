@@ -4,3 +4,4 @@ orange is fruit
  apple is red
 sun is bright
 sky is dark
+stars twinkle
