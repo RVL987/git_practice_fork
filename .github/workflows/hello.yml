@@ -1,0 +1,21 @@
+user:
+  name: Harini
+
+on:
+  push:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+     - name: greeting
+       run: echo "Hello from CI!"
+   
+     - name: Date
+       run: date +%Y-%m-%d
+
+     - name: Commit hash
+       run: echo "The commit hash is ${{github.sha}}"
+
+    
