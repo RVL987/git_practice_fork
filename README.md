@@ -1,1 +1,1 @@
-This repo is to document the Git and GitHub toolchain practice
+This repo contains my practice work on git and github
