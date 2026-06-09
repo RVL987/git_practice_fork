@@ -7,7 +7,7 @@ on:
 jobs:
 
   test:
-    runs-on: latest ubuntu
+    runs-on: ubuntu_latest
 
     steps:
      - name: checkout code
