@@ -1,0 +1,46 @@
+name: Auto Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Configure Git
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Generate Next Version Tag
+      id: versioning
+      run: |
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        VERSION_STR=$(echo "$LATEST_TAG" | sed 's/^v//')
+        IFS='.' read -r major minor patch <<< "$VERSION_STR"
+        NEXT_PATCH=$((patch + 1))
+        NEXT_TAG="v$major.$minor.$NEXT_PATCH"
+        echo "next_tag=$NEXT_TAG" >> $GITHUB_OUTPUT
+
+    - name: Create Git Tag and Push
+      run: |
+        git tag -a "${{ steps.versioning.outputs.next_tag }}" -m "Release ${{ steps.versioning.outputs.next_tag }}"
+        git push origin "${{ steps.versioning.outputs.next_tag }}"
+
+    - name: Create GitHub Release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release create "${{ steps.versioning.outputs.next_tag }}" \
+          --title "Release ${{ steps.versioning.outputs.next_tag }}" \
+          --notes "Automated release"
