@@ -1,0 +1,23 @@
+name: shellcheck
+
+on:
+  push:
+  pull_request:
+
+jobs:
+
+  test:
+    runs-on: latest ubuntu
+
+    steps:
+     - name: checkout code
+       uses: actions/checkout@v4
+
+     - name: install shellcheck
+       run: |
+        sudo apt update
+        sudo apt install -y shellcheck
+
+     - name: Run shellcheck
+       run: |
+        shellcheck *.sh
