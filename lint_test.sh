@@ -1,3 +1,4 @@
-#!usr/bin/env bash
+#!/usr/bin/env bash
 
-echo "Today date is "$+%Y-%m-%d" "
+echo "Today date is $(date +%Y-%m-%d) "
+echo "this script is a trial"
