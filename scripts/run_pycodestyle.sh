@@ -24,7 +24,7 @@ EOF
 
   # Append truncation message if output is long
   if [ $(wc -l < lint_output.txt) -gt 30 ]; then
-    COMMENT_BODY="$COMMENT_BODY"$'\n'*(Truncated... showing first 30 violations)*
+    COMMENT_BODY="$COMMENT_BODY"$'\n'
   fi
 
   # Build a safe JSON payload using jq
