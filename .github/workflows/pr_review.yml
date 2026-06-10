@@ -1,0 +1,118 @@
+name: Automated PR Code Review Summary
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  review-summary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Complete Git History
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch Target Base Branch
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}:${{ github.event.pull_request.base.ref }}
+
+      - name: Generate PR Metrics & Update Timeline
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          echo "=== Step 1: Compute Diff Metrics ==="
+          
+          # Calculate general file and line statistics using git diff
+          FILES_CHANGED=$(git diff --name-only $BASE_REF...HEAD | wc -l | xargs)
+          
+          # Parse raw shortstat output directly to avoid array mapping variations
+          STAT_RAW=$(git diff --shortstat $BASE_REF...HEAD)
+          ADDITIONS=$(echo "$STAT_RAW" | grep -oE '[0-9]+ insertion' | awk '{print $1}')
+          DELETIONS=$(echo "$STAT_RAW" | grep -oE '[0-9]+ deletion' | awk '{print $1}')
+          
+          TOTAL_ADD=${ADDITIONS:-0}
+          TOTAL_DEL=${DELETIONS:-0}
+
+          # Generate Diff Statistics Table markdown structure
+          DIFF_STAT_TABLE=$(git diff --stat $BASE_REF...HEAD)
+
+          echo "=== Step 2: Scan for Debt Markers (TODO/FIXME) ==="
+          DEBT_SUMMARY=""
+          HAS_DEBT=0
+          
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            if [ -f "$file" ]; then
+              # Isolate added lines containing debt flags
+              DEBT_MATCHES=$(git diff $BASE_REF...HEAD -- "$file" | grep -E '^\+[^+]' | grep -EI 'TODO|FIXME' || true)
+              if [ ! -z "$DEBT_MATCHES" ]; then
+                HAS_DEBT=1
+                DEBT_SUMMARY="${DEBT_SUMMARY}\n#### \`$file\`\n\`\`\`diff\n$DEBT_MATCHES\n\`\`\`\n"
+              fi
+            fi
+          done < <(git diff --name-only $BASE_REF...HEAD)
+
+          if [ "$HAS_DEBT" -eq 0 ]; then
+            DEBT_SUMMARY="No active TODO or FIXME markers introduced in this pull request."
+          fi
+
+          echo "=== Step 3: Construct Markdown Comment Payload ==="
+          # Explicit unique tracking marker to maintain comment tracking persistence
+          COMMENT_MARKER=""
+          
+          COMMENT_BODY="$COMMENT_MARKER
+          ##  Automated Code Review Summary
+          
+          | Metric | Value |
+          | :--- | :--- |
+          |  **Files Changed** | $FILES_CHANGED |
+          |  **Lines Added** | $TOTAL_ADD |
+          |  **Lines Removed** | $TOTAL_DEL |
+          
+          ###  Diff Statistics
+          \`\`\`text
+          $DIFF_STAT_TABLE
+          \`\`\`
+          
+          ### Technical Debt Analysis (TODO / FIXME)
+          $DEBT_SUMMARY"
+
+          # Use jq to safely serialize complex multi-line markdown strings into valid JSON
+          JSON_PAYLOAD=$(jq -n --arg body "$COMMENT_BODY" '{body: $body}')
+
+          echo "=== Step 4: Locate Existing Bot Comment ID ==="
+          COMMENTS_URL="https://api.github.com/repos/$REPO/issues/$PR_NUMBER/comments"
+          EXISTING_COMMENTS=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" "$COMMENTS_URL")
+          
+          # Exact matching extraction via jq filtering logic
+          COMMENT_ID=$(echo "$EXISTING_COMMENTS" | jq -r --arg marker "$COMMENT_MARKER" '.[] | select(.body | contains($marker)) | .id' | head -n 1)
+
+          echo "=== Step 5: Post or Patch Comment via GitHub REST API ==="
+          if [ -z "$COMMENT_ID" ] || [ "$COMMENT_ID" = "null" ]; then
+            echo "No existing comment found. Dispatching POST request to instantiate new summary..."
+            curl -s -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$COMMENTS_URL" \
+              -d "$JSON_PAYLOAD"
+          else
+            echo "Matching comment detected with ID: $COMMENT_ID. Dispatching PATCH request to update summary..."
+            TARGET_PATCH_URL="https://api.github.com/repos/$REPO/issues/comments/$COMMENT_ID"
+            curl -s -X PATCH \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$TARGET_PATCH_URL" \
+              -d "$JSON_PAYLOAD"
+          fi
+          
+          echo "Automated execution completed successfully."
